@@ -89,4 +89,4 @@ app.use((_req, res) => {
 // interfaces para que el Service (ClusterIP) enrute tráfico al pod.
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Microservicio escuchando en http://0.0.0.0:${PORT} (env=${ENV}, v${VERSION})`);
-});
+});// trigger CI run
