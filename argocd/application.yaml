@@ -29,11 +29,11 @@ spec:
     targetRevision: main
     path: helm/microservicio
     helm:
-      # Encadena values-dev + values-kind: el último gana, así que la imagen
-      # local del kind sobreescribe repository/tag/pullPolicy del dev "cloud".
+      # Sólo values-dev.yaml: el tag ido a Git por el pipeline (sha-<short>)
+      # se propaga al clúster via pull desde GHCR (paquete público).
+      # values-kind.yaml se reserva para pruebas locales aisladas de GHCR.
       valueFiles:
         - values-dev.yaml
-        - values-kind.yaml
   # Sincronización automática + self-heal + prune: cualquier drift se corrige.
   syncPolicy:
     automated:
