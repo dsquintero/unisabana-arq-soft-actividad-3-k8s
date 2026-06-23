@@ -1,0 +1,27 @@
+{{/*
+  Ingress — opcional (enabled en qa por defecto).
+
+  Requiere un IngressController instalado en el clúster (nginx-ingress).
+  En dev se mantiene deshabilitado y se accede por NodePort directamente.
+*/}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "microservicio.fullname" . }}
+  labels:
+    {{- include "microservicio.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "microservicio.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

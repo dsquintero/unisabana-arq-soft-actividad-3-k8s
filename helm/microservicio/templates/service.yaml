@@ -1,0 +1,24 @@
+{{/*
+  Service — expone el Deployment dentro del clúster (ClusterIP) o
+  hacia el host (NodePort en dev/qa para demostrar acceso desde el navegador).
+
+  El targetPort coincide con containerPort del Deployment y APP_PORT (3000).
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "microservicio.fullname" . }}
+  labels:
+    {{- include "microservicio.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+      {{- if eq .Values.service.type "NodePort" }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "microservicio.selectorLabels" . | nindent 4 }}

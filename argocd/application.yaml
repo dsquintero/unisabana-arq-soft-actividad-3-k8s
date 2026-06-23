@@ -1,0 +1,43 @@
+# ====================================================================
+# application.yaml — ArgoCD Application para el entorno DEV.
+#
+# ArgoCD lee el chart de Helm desde el repositorio Git (GitOps): cualquier cambio
+# en `helm/microservicio/values-dev.yaml` (o `values-kind.yaml`) triggerea un sync
+# automático que reconcialia el estado del clúster con Git.
+#
+# Aplica con:
+#   kubectl apply -f argocd/application.yaml -n argocd
+# ====================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ms-dev
+  namespace: argocd
+  # finalizers: permite que ArgoCD elimine los recursos al borrar la app.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # Project: "default" viene pre-instalado con ArgoCD; sin restricciones extra.
+  project: default
+  # Namespace destino donde despliega (los pods del microservicio dev).
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  # Fuente: chart de Helm en el repo Git público.
+  source:
+    repoURL: https://github.com/dsquintero/unisabana-arq-soft-actividad-3-k8s
+    targetRevision: main
+    path: helm/microservicio
+    helm:
+      # Encadena values-dev + values-kind: el último gana, así que la imagen
+      # local del kind sobreescribe repository/tag/pullPolicy del dev "cloud".
+      valueFiles:
+        - values-dev.yaml
+        - values-kind.yaml
+  # Sincronización automática + self-heal + prune: cualquier drift se corrige.
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true   # crea namespace dev si no existe

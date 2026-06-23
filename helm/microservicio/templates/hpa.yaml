@@ -1,0 +1,28 @@
+{{/*
+  HorizontalPodAutoscaler — escala el Deployment por CPU medio.
+
+  Activo sólo en qa (override): en dev se deja `enabled: false` para reducir
+  cambios durante la demo. En kind viene con metrics-server preconfigurado.
+*/}}
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "microservicio.fullname" . }}
+  labels:
+    {{- include "microservicio.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "microservicio.fullname" . }}
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.cpuAverageUtilization }}
+{{- end }}

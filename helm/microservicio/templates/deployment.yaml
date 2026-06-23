@@ -1,0 +1,84 @@
+{{/*
+  Deployment — Microservicio Node.js.
+
+  Puntos clave para la rúbrica:
+   - image.repository / image.tag vienen de values (override por entorno).
+   - envFrom ConfigMap para inyectar APP_* y evidenciar GitOps.
+   - probes de liveness/readiness sobre /healthz (definidas en server.js).
+   - resources requests/limits explícitos (override por entorno).
+   - Pod Security Context runAsNonRoot para cumplir con PSS Restricted.
+   - strategy RollingUpdate para cero downtime durante sync de ArgoCD.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "microservicio.fullname" . }}
+  labels:
+    {{- include "microservicio.labels" . | nindent 4 }}
+spec:
+  # Replicas se omite si el HPA está activo (K8s requiere que el HPA controle).
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "microservicio.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "microservicio.labels" . | nindent 8 }}
+    spec:
+      # Pod Security Context: nunca como root, UID fijo no privilegiado.
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          # Sondas: /healthz siempre 200 mientras express arriba.
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path | quote }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path | quote }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          {{- end }}
+          # Variables de entorno del ConfigMap (patrón 12-factor / GitOps).
+          env:
+            {{- include "microservicio.env" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

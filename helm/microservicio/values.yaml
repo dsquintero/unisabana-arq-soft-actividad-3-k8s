@@ -1,0 +1,103 @@
+# ====================================================================
+# values.yaml — Valores por DEFECTO del chart de Helm.
+#
+# Los overrides por entorno (values-dev.yaml y values-qa.yaml) reemplazan
+# selectivamente las claves de este archivo. ArgoCD usa estos values para
+# materializar los manifiestos de Kubernetes: el pipeline CI bump-ea image.tag
+# en values-dev.yaml, y ArgoCD sincroniza el cambio (GitOps).
+# ====================================================================
+
+# --- Imagen del contenedor -----------------------------------------
+image:
+  # Repositorio GHCR público donde el pipeline sube la imagen.
+  repository: ghcr.io/dsquintero/microservicio-k8s
+  # Tag por defecto: durante desarrollo local se usa "latest" para que `docker
+  # build` y el clúster kind (con image-side-car) puedan resolverlo. En prod se
+  # fijaría a una versión SemVer (v.g. "1.0.0") o a un immutable SHA.
+  tag: "1.0.0"
+  # Política de pull de imagen. En prod "IfNotPresent" ahorra ancho de banda.
+  # Aquí "Always" para evidenciar en el video cómo se actualiza con el pipeline.
+  pullPolicy: Always
+
+# --- Réplicas del Deployment ---------------------------------------
+# N base de réplicas; el HPA puede escalar por encima si hay carga.
+# En dev=2, qa=3 (ver overrides).
+replicaCount: 2
+
+# --- Entorno de la app (ConfigMap) ---------------------------------
+# Estas claves terminan como variables APP_* en el contenedor (ver server.js).
+app:
+  env: "dev"
+  version: "1.0.0"
+  # Mensaje configurable para demo que el ConfigMap se actualiza sin tocar la
+  # imagen (12-factor / GitOps).
+  message: "Hola desde el microservicio K8s"
+
+# --- Service -------------------------------------------------------
+service:
+  # ClusterIP es el tipo correcto intra-clúster. En kind/nodePort usar NodePort
+  # para acceder desde el host (ver override dev con NodePort:30080).
+  type: ClusterIP
+  port: 80
+  # targetPort debe coincidir con APP_PORT del contenedor y EXPOSE del Dockerfile.
+  targetPort: 3000
+
+# --- Ingress -------------------------------------------------------
+# En kind sin ingress controller se queda deshabilitado; existe para evidenciar
+# "configuración por entorno" (lo activamos en qa con host distinto).
+ingress:
+  enabled: false
+  className: "nginx"
+  host: "ms.local"
+  path: "/"
+  pathType: Prefix
+
+# --- Recursos (requests/limits) ------------------------------------
+# Los pedimos explícitos: K8s programmea mejor y ArgoCD puede alertar si las
+# pods están throttleadas. Los overrides dev/qa cambian estos valores.
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "250m"
+    memory: "256Mi"
+
+# --- Sondas (liveness / readiness) -------------------------------
+# /healthz es idempotente y responde 200, perfecto para ambas.
+probes:
+  liveness:
+    enabled: true
+    path: "/healthz"
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    path: "/healthz"
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+# --- Horizontal Pod Autoscaler (HPA) -----------------------------
+# Se activa cuando se instala en un clúster con metrics-server (kind lo trae).
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  # Escala cuando el CPU medio supera el 70% del request.
+  cpuAverageUtilization: 70
+
+# --- Seguridad del Pod (Pod Security Context) -------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+
+# --- Node selector / tolerations / affinity -----------
+# Default vacío para no pegarse a un nodo en kind de un solo nodo.
+nodeSelector: {}
+tolerations: []
+affinity: {}

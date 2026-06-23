@@ -1,0 +1,52 @@
+# ====================================================================
+# values-dev.yaml — Override del entorno DESARROLLO.
+#
+# Uso:
+#   helm install ms-dev ./helm/microservicio -f helm/microservicio/values-dev.yaml
+#   helm upgrade ms-dev ./helm/microservicio -f helm/microservicio/values-dev.yaml
+#
+# Repasa el concepto de "personalización según el entorno" de la rúbrica:
+#   - 2 réplicas (mínima HA), tag "latest" para que cada push del pipeline
+#     sea visible de inmediato al hacer `docker build`/pull.
+#   - Service NodePort en el host 30080 (mapeado en kind-config.yaml).
+#   - Ingress deshabilitado (más simple para demo local).
+#   - Recursos bajos para que no compita con ArgoCD en el clúster local.
+# ====================================================================
+
+image:
+  repository: ghcr.io/dsquintero/microservicio-k8s
+  # En dev: latest para reflejar siempre el último pipeline exitoso.
+  tag: "latest"
+  pullPolicy: Always
+
+replicaCount: 2
+
+app:
+  env: "dev"
+  version: "1.0.0"
+  # Mensaje diferenciado: en el video se ve cómo se actualiza al cambiar el value.
+  message: "Hola desde el microservicio K8s [DEV]"
+
+service:
+  # NodePort expuesto en 30080 (mapeado a host:80 en kind-config.yaml).
+  type: NodePort
+  port: 80
+  targetPort: 3000
+  nodePort: 30080
+
+ingress:
+  enabled: false
+
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "150m"
+    memory: "128Mi"
+
+hpa:
+  enabled: false   # en dev sin HPA para evidenciarlo sólo en qa
+  minReplicas: 2
+  maxReplicas: 4
+  cpuAverageUtilization: 70

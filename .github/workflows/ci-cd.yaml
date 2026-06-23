@@ -1,0 +1,176 @@
+# ====================================================================
+# ci-cd.yaml — Pipeline CI/CD para el microservicio K8s (Actividad 3).
+#
+# Trigger: push sobre la rama 'main'. Se excluyen los commits hechos por el
+# propio bot de GitHub Actions para evitar loops (GitOps: el pipeline commitea
+# el nuevo tag de imagen en values-dev.yaml y eso NO debe volver a dispararlo).
+#
+# Stages:
+#   1. CI       — checkout, npm ci, npm test (test runner de Node 22).
+#   2. Build    — docker build de la imagen multi-stage.
+#   3. Publish  — push a GHCR con dos tags: 'latest' y 'sha-<short>'.
+#   4. Deploy   — bump de image.tag en values-dev.yaml + commit/push (GitOps).
+#                 ArgoCD detecta el cambio y despliega en el clúster.
+#
+# Secretos requeridos (Settings → Secrets and variables → Actions):
+#   ARGOCD_SERVER   — host:puerto del server de ArgoCD accesible desde el runner.
+#                     Para runner cloud: exponer ArgoCD con un túnel (ngrok/cloudflared)
+#                     o usar self-hosted runner en la máquina donde corre kind.
+#   ARGOCD_TOKEN    — token de ArgoCD generado con `argocd account generate-token`.
+# ====================================================================
+name: CI/CD microservicio k8s
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "helm/microservicio/**"
+      - ".github/workflows/ci-cd.yaml"
+
+# Permisos necesarios: packages write para GHCR, contents write para commitear
+# el bump de values-dev, pull-requests (no usado) y actions read.
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------
+  # Job: build  -> build, tests y push a GHCR
+  # ---------------------------------------------------------------
+  build:
+    name: Build, test & publish
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha_short }}
+    steps:
+      # Checkout del código
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Setup de Node 22 para correr tests
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: app/package.json
+
+      # Instalación de dependencias (reproducible con package-lock si existiese)
+      - name: Install deps
+        run: npm --prefix app ci --no-audit --no-fund || npm --prefix app install --no-audit --no-fund
+
+      # Tests unitarios (Node 22 test runner integrado)
+      - name: Run tests
+        run: npm --prefix app test
+
+      # Metadata: short SHA para tags de imagen inmutables
+      - name: Compute tags
+        id: meta
+        run: |
+          SHORT=$(git rev-parse --short HEAD)
+          echo "sha_short=$SHORT" >> "$GITHUB_OUTPUT"
+          echo "Tags a publicar: latest, sha-$SHORT"
+
+      # Build con BuildKit (cache de capas, multi-stage Dockerfile)
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: false
+          load: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/microservicio-k8s:latest
+            ghcr.io/${{ github.repository_owner }}/microservicio-k8s:sha-${{ steps.meta.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Login a GHCR usando el GITHUB_TOKEN inyectado automáticamente.
+      # Para push a paquetes de la MISMA cuenta no hace falta PAT adicional.
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Push de la imagen con los dos tags
+      - name: Push to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: app
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/microservicio-k8s:latest
+            ghcr.io/${{ github.repository_owner }}/microservicio-k8s:sha-${{ steps.meta.outputs.sha_short }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------
+  # Job: deploy -> bump tag en values-dev.yaml + commit/push (GitOps)
+  # ---------------------------------------------------------------
+  deploy:
+    name: Bump image tag (GitOps)
+    runs-on: ubuntu-latest
+    needs: build
+    # Excluir commits hechos por el propio bot para evitar loop infinito
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Necesitamos un PAT o GITHUB_TOKEN con contents:write para commitear.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # Actualiza image.tag en values-dev.yaml con el nuevo tag sha-<short>.
+      # Esto convierte al repo Git en la única fuente de verdad: pipeline no toca
+      # el clúster directamente; ArgoCD observará el cambio y sincronizará.
+      - name: Bump tag in values-dev.yaml
+        env:
+          NEW_TAG: sha-${{ needs.build.outputs.image_tag }}
+        run: |
+          sed -i "s|^\([[:space:]]*tag:[[:space:]]*\).*|\\1\"${NEW_TAG}\"|" helm/microservicio/values-dev.yaml
+          echo "=== diff values-dev.yaml ==="
+          git diff helm/microservicio/values-dev.yaml
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add helm/microservicio/values-dev.yaml
+          git commit -m "chore(helm): bump image.tag to sha-${{ needs.build.outputs.image_tag }} [skip ci]" || echo "Sin cambios para commitear"
+          git push
+
+  # ---------------------------------------------------------------
+  # Job: sync-argocd (opcional) — fuerza sync inmediato en ArgoCD.
+  #   El runner cloud no ve el localhost del clúster kind; aquí se deja el job
+  #   como plantilla: si ARGOCD_SERVER y ARGOCD_TOKEN están definidos, ejecuta
+  #   `argocd app sync ms-dev`, lo que evita esperar el polling default (2-3 min).
+  #   Para el laboratorio local, el video demuestra este paso corriendo en tu
+  #   propia terminal con kubectl-forward + argocd CLI.
+  # ---------------------------------------------------------------
+  sync-argocd:
+    name: Sync ArgoCD (opcional)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: ${{ vars.ARGOCD_SERVER != '' && vars.ARGOCD_TOKEN != '' }}
+    steps:
+      - name: Install argocd CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd \
+            https://github.com/argoproj/argo-cd/releases/download/v2.11.2/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Login & sync ms-dev
+        env:
+          ARGOCD_SERVER: ${{ vars.ARGOCD_SERVER }}
+          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+        run: |
+          argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_TOKEN" --plaintext --grpc-web
+          argocd app sync ms-dev --prune --self-heal --timeout 120
+          argocd app wait ms-dev --sync --health --timeout 120

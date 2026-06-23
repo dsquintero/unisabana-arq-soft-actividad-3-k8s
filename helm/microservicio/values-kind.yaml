@@ -1,0 +1,19 @@
+# ====================================================================
+# values-kind.yaml — Override local para clúster kind.
+#
+# Carga en ArgoCD combinando: values-dev.yaml + values-kind.yaml (dev) o
+# values-qa.yaml + values-kind.yaml (qa). El último archivo gana, así que se
+# sobreescriben las claves de imagen apuntando a una imagen local (cargada en
+# el nodo kind con `kind load docker-image`).
+#
+# Cuando el pipeline CI/CD (Fase 5) publique la imagen en GHCR, se puede_eliminar
+# este override o bifurcarlo en values-kind-cloud.yaml para comparar ambos modos.
+# ====================================================================
+image:
+  # Imagen local compilada con `docker build -t microservicio-k8s:1.0.0`
+  # y cargada al nodo kind con `kind load docker-image`.
+  repository: microservicio-k8s
+  tag: "1.0.0"
+  # Never: el pod no intenta hacer pull; usa la imagen ya presente en el nodo.
+  # Esto evita ImagePullBackOff cuando aún no hay pipeline publicando a GHCR.
+  pullPolicy: Never

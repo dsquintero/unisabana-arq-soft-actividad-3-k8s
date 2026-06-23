@@ -1,0 +1,18 @@
+{{/*
+  ConfigMap — Variables de entorno de la app (APP_*).
+
+  Patrón 12-factor + GitOps: cambiar values.yaml (o values-dev.yaml / values-qa.yaml)
+  produce un nuevo ConfigMap. ArgoCD detecta el diff en Git y aplica el cambio
+  SIN tener que reconstruir la imagen. Demo claro en el video cambiando APP_MESSAGE.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "microservicio.fullname" . }}
+  labels:
+    {{- include "microservicio.labels" . | nindent 4 }}
+data:
+  # Claves referenciadas por envFrom/valueFrom en el Deployment.
+  APP_ENV: {{ .Values.app.env | quote }}
+  APP_VERSION: {{ .Values.app.version | quote }}
+  APP_MESSAGE: {{ .Values.app.message | quote }}

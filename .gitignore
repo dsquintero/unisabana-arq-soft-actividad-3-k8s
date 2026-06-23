@@ -1,0 +1,17 @@
+# dependencias de node instaladas luego de npm install
+app/node_modules/
+app/package-lock.json.bak
+
+# logs y temporales
+*.log
+.env
+
+# builds locales
+*.local
+
+# binarios descargados temporalmente (sólo en raíz, si se descargan aquí):
+# se nombran con un sufijo para distinguirlos de las carpetas del proyecto.
+/kubectl.bin
+/kind.bin
+/argocd.bin
+/helm.tar.gz

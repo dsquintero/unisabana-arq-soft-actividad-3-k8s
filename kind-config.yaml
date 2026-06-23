@@ -1,0 +1,26 @@
+# ====================================================================
+# kind-config.yaml — Configuración del clúster kind para la Actividad 3 K8S.
+#
+# kind (Kubernetes in Docker) levanta un clúster K8s dentro de un contenedor
+# Docker: ideal para el laboratorio sin tocar el entorno del host.
+#
+# extraPortMappings: publican puertos NodePort del clúster al host, de modo que
+#   curl localhost:30080     -> Service NodePort del microservicio DEV
+#   curl localhost:30081     -> Service NodePort del microservicio QA
+#   http://localhost:30043   -> server de ArgoCD (UI + API)
+# ====================================================================
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+  - role: control-plane
+    # Mapeo de puertos NodePort del clúster al host.
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+      - containerPort: 30081
+        hostPort: 30081
+        protocol: TCP
+      - containerPort: 30043
+        hostPort: 30043
+        protocol: TCP

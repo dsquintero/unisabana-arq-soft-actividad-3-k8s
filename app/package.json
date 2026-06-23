@@ -1,0 +1,17 @@
+{
+  "name": "microservicio-k8s",
+  "version": "1.0.0",
+  "description": "Microservicio Node.js de demo para la Actividad 3 (K8s, Helm, ArgoCD, CI/CD)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["k8s", "helm", "argocd", "microservicio"],
+  "author": "Actividad 3 - Arq. Soft",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

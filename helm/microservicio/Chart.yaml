@@ -1,0 +1,20 @@
+apiVersion: v2
+# Nombre del chart cómo se referencia en ArgoCD / helm install.
+name: microservicio
+# Descripción visible con `helm show chart`.
+description: Microservicio Node.js (Express) desplegado en Kubernetes con Helm.
+type: application
+# versión del chart SemVer; subir al hacer cambios en templates/values.
+version: 0.1.0
+# versión de la app dentro de la imagen; se usa como tag por defecto en values.yaml.
+appVersion: "1.0.0"
+keywords:
+  - microservicio
+  - nodejs
+  - express
+  - helm
+  - kubernetes
+  - argocd
+maintainers:
+  - name: "Actividad 3 - Arq. Soft"
+    url: "https://github.com/dsquintero/unisabana-arq-soft-actividad-3-k8s"

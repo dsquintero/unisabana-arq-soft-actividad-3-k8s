@@ -1,0 +1,51 @@
+# ====================================================================
+# values-qa.yaml — Override del entorno QA (pre-productivo).
+#
+# Uso:
+#   helm install ms-qa ./helm/microservicio -f helm/microservicio/values-qa.yaml
+#   helm upgrade ms-qa ./helm/microservicio -f helm/microservicio/values-qa.yaml
+#
+# Evidencia "personalización según el entorno": 3 réplicas, tag SemVer inmutable,
+# HPA activado, requests/limits mayores, Ingress habilitado con host distinto.
+# ====================================================================
+
+image:
+  repository: ghcr.io/dsquintero/microservicio-k8s
+  # En qa: tag SemVer inmutable en lugar de "latest". ArgoCD puede hacer rollback
+  # fácil comparando tags. El pipeline publica los dos (latest + vX.Y.Z).
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+app:
+  env: "qa"
+  version: "1.0.0"
+  message: "Hola desde el microservicio K8s [QA]"
+
+service:
+  type: NodePort
+  port: 80
+  targetPort: 3000
+  nodePort: 30081
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "ms-qa.local"
+  path: "/"
+  pathType: Prefix
+
+resources:
+  requests:
+    cpu: "150m"
+    memory: "128Mi"
+  limits:
+    cpu: "300m"
+    memory: "256Mi"
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 8
+  cpuAverageUtilization: 65
